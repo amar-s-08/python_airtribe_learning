@@ -116,3 +116,16 @@
 #     guess = float(input("Guess the number: ")) #int fails when we give float number but if we use float int will also get exact output
 
 # print("Correct Guess")
+
+
+age = int(input("Enter Age : "))
+
+# Standard if-else statement
+if age >= 18:
+    status = "Adult"
+else:
+    status = "Minor"
+
+# Equivalent ternary operator expression
+status = "Adult" if age >= 18 else "Minor"
+print(status)
