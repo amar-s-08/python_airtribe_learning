@@ -1,6 +1,6 @@
 # python_airtribe_learning
 
-A personal learning repository for **Python** as part of the [Airtribe](https://airtribe.live) curriculum. This repo contains practice scripts, notes, and examples covering Python fundamentals, data structures, exception handling, and object-oriented programming.
+A personal learning repository for **Python** as part of the [Airtribe](https://airtribe.live) curriculum. This repo contains practice scripts, notes, and examples covering Python fundamentals, data structures, exception handling, object-oriented programming, and HTTP/API concepts.
 
 ## Prerequisites
 
@@ -24,6 +24,7 @@ python_airtribe_learning/
 ├── non_primitive.py        # Data structures: arrays, linked lists, stacks, queues
 ├── python_ds.py            # Python collections: tuples, sets, dictionaries
 ├── exception_handling.py   # try/except, custom exceptions, error handling
+├── requesttypes.md         # HTTP methods (GET, POST, PUT, PATCH, DELETE) and request data
 ├── amar.py                 # Additional practice scripts
 ├── test.py                 # Test and experiment scripts
 └── module01/               # Object-Oriented Programming (OOP)
@@ -43,6 +44,11 @@ python_airtribe_learning/
 | Tuples, sets, dictionaries | `python_ds.py` |
 | Exception handling | `exception_handling.py` |
 | OOP — classes, inheritance, polymorphism, abstraction, encapsulation | `module01/` |
+| HTTP request types and request data (body, query, path, headers) | `requesttypes.md` |
+
+## Documentation
+
+- [requesttypes.md](requesttypes.md) — HTTP methods (GET, POST, PUT, PATCH, DELETE), PUT vs PATCH examples, and request data types (body, query parameters, path parameters, headers)
 
 ## Running Examples
 
