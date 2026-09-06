@@ -1,0 +1,5 @@
+{
+    "python.languageServer": "None",
+    "python.defaultInterpreterPath": "/Users/amars/Documents/Python Airtribe/task-project/.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+}

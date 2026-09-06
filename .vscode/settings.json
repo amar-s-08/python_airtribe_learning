@@ -1,3 +1,9 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/first-django-project/.venv/bin/python"
+  "python.languageServer": "None",
+  "python.defaultInterpreterPath": "${workspaceFolder}/task-project/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/task-project",
+    "${workspaceFolder}/first-django-project"
+  ]
 }

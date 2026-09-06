@@ -1,0 +1,14 @@
+{
+  "venvPath": "task-project",
+  "venv": ".venv",
+  "executionEnvironments": [
+    {
+      "root": "task-project",
+      "extraPaths": ["task-project"]
+    },
+    {
+      "root": "first-django-project",
+      "extraPaths": ["first-django-project"]
+    }
+  ]
+}
