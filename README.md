@@ -32,7 +32,7 @@ This repository documents the transition from core Python programming concepts t
 1. **Python Core & Data Structures**: Scripts covering control flow, primitive and non-primitive structures (lists, stacks, queues, linked lists, sets, dicts, tuples), and robust error handling.
 2. **Object-Oriented Programming (OOP)**: Real-world implementations demonstrating the four pillars of OOP (Inheritance, Polymorphism, Abstraction, Encapsulation).
 3. **HTTP & REST Fundamentals**: Detailed notes and references on HTTP methods, status codes, and request payloads.
-4. **Django REST Services**: Hands-on Django projects implementing production patterns including service-layer separation, custom JSON persistence, data validation, and RESTful routing.
+4. **Django REST Services**: Hands-on Django projects with **PostgreSQL**, **Django ORM models**, **DRF serializers**, JSON-backed task storage (transitional), Docker Compose for local databases, and RESTful routing.
 
 ---
 
@@ -67,17 +67,23 @@ python_airtribe_learning/
 │
 └── task-project/                  # Task & User Management REST Service
     ├── manage.py                  # Django CLI runner
+    ├── docker-compose.yml         # Local PostgreSQL (taskdb) for development
+    ├── postgres_backup.sql        # SQL dump / backup reference
+    ├── model.md                   # Notes on models vs entities (Django)
     ├── config/                    # Project settings & root routing
-    │   ├── settings.py            # Registered apps (rest_framework, tasks)
+    │   ├── settings.py            # PostgreSQL config, rest_framework, tasks app
     │   └── urls.py                # Main URLconf delegating to tasks.urls
     └── tasks/                     # Core business application
+        ├── models.py              # User Django model (PostgreSQL)
+        ├── serializers.py         # UserSerializer, LoginSerializer
+        ├── migrations/            # Django schema migrations (User table)
         ├── urls.py                # RESTful endpoint routes (/api/users/, /api/tasks/)
-        ├── views.py               # CRUD controllers, validation, and HTTP responses
-        ├── services/              # Service & persistence layer
-        │   └── json_util.py       # Safe JSON file I/O operations with context management
-        └── data/                  # Persistent JSON storage
-            ├── users.json         # User database records
-            └── tasks.json         # Task database records
+        ├── views.py               # User ORM + task JSON controllers
+        ├── services/              # Persistence helpers
+        │   └── json_util.py       # JSON file I/O for tasks (and legacy user checks)
+        └── data/                  # JSON document storage
+            ├── users.json         # Legacy/sample users (still used for task user_id checks)
+            └── tasks.json         # Task records
 ```
 
 ---
@@ -86,27 +92,23 @@ python_airtribe_learning/
 
 ### 1. Task Project (`task-project/`) — Full REST API
 
-The **Task Project** is a fully functional, RESTful backend service for managing **Users** and their assigned **Tasks**. It is built with **Django** and **Django REST Framework (DRF)**, featuring a clean architectural separation between business controllers and file-based data persistence.
+The **Task Project** is a RESTful backend for **Users** and **Tasks**, built with **Django 6.1** and **Django REST Framework (DRF)**. User APIs persist to **PostgreSQL** via the Django ORM; task APIs still use **JSON files** while the schema is being migrated—see [model.md](task-project/model.md) for how models/entities fit together.
 
 #### Architecture & Design Highlights
 
-- **Service-Oriented Architecture (SOA)**:
-  - Controller views (`tasks/views.py`) handle HTTP requests, validate input, and structure responses.
-  - Data operations are delegated to a dedicated utility service (`tasks/services/json_util.py`), isolating persistence logic from API controllers.
-- **Custom JSON Document Persistence**:
-  - Instead of requiring an external database, data is stored in structured JSON documents (`users.json` and `tasks.json`).
-  - Utilizes Python's `pathlib.Path` to compute file locations relative to `__file__`, ensuring path portability across macOS, Linux, and Windows.
-- **Relational Integrity Simulation**:
-  - Simulates foreign-key relationships between tasks and users (`user_id` on each task).
-  - Enforces referential integrity: tasks cannot be created or reassigned to non-existent users (`_user_exists` check).
-- **Safe Resource Management**:
-  - Employs Python context managers (`with open(...)`) in `json_util.py` to prevent file handle leaks.
-  - Indents JSON writes (`indent=2`) for human-readable auditability.
-- **Strong Typing & Defensive Validation**:
-  - Uses Python type hints (`request: Request -> Response`, `set[str]`, `user_id: int`).
-  - Validates missing required fields, checks for duplicate usernames and emails using set operations, and returns precise error payloads.
-- **Standardized UTC Timestamps**:
-  - Records ISO-8601 timestamps (`%Y-%m-%dT%H:%M:%SZ`) using timezone-aware UTC dates (`_utc_now()`) for audit tracking (`created_at`, `updated_at`).
+- **Hybrid persistence (learning migration)**:
+  - **Users**: `User` model in PostgreSQL (`tasks/models.py`), exposed through `UserSerializer` and `LoginSerializer`.
+  - **Tasks**: Stored in `tasks/data/tasks.json` via `read_json` / `write_json` in `tasks/services/json_util.py`.
+  - Task endpoints validate `user_id` with `_user_exists()`, which currently reads **`users.json`**, not the database. After creating users through `POST /api/users/create/`, sync IDs in `users.json` or migrate task validation to the ORM so task creation matches DB users.
+- **PostgreSQL via Docker Compose**:
+  - `docker-compose.yml` runs Postgres (`taskdb`, user/password `postgres`) on port `5432`, matching `config/settings.py`.
+- **DRF serializers**:
+  - `UserSerializer` (`ModelSerializer`) validates and shapes create/list/detail responses.
+  - `LoginSerializer` validates username-only login payloads.
+- **REST controllers**:
+  - Function-based views with `@api_view` in `tasks/views.py`; commented blocks preserve the earlier JSON-only implementation for comparison.
+- **Tasks JSON layer**:
+  - Auto-increment IDs, UTC timestamps (`_utc_now()`), and CRUD still mirror the original file-based design.
 
 ---
 
@@ -114,15 +116,14 @@ The **Task Project** is a fully functional, RESTful backend service for managing
 
 | Capability | Implementation Detail | Specialty / Benefit |
 |------------|-----------------------|---------------------|
-| **Full CRUD for Tasks** | `GET`, `POST`, `PUT`, `DELETE` on `/api/tasks/` | Complete task lifecycle management with individual item endpoints. |
-| **User Entity Management** | `GET`, `POST` on `/api/users/` | User creation with validation, uniqueness checks, and individual user queries. |
-| **Relational Filtering** | `GET /api/users/<user_id>/tasks/` | Retrieves all tasks assigned to a specific user (foreign-key filtering). |
-| **Duplicate Prevention** | `set[str]` comparison on `username` and `email` | Rejects duplicate usernames and emails with HTTP 400 Bad Request before writing. |
-| **Foreign Key Enforcement** | `_user_exists(user_id)` helper | Prevents orphaned tasks by verifying user existence before task creation/update. |
-| **Auto-Incrementing IDs** | Dynamic `max_id + 1` computation | Automatically generates consecutive primary keys for users and tasks. |
-| **Automatic Timestamping** | `_utc_now()` using `datetime(timezone.utc)` | Sets `created_at` on insert and updates `updated_at` on modification. |
-| **Explicit HTTP Statuses** | DRF `status.HTTP_*` constants | Returns semantic status codes (`200 OK`, `201 CREATED`, `400 BAD REQUEST`, `404 NOT FOUND`). |
-| **Portable File Resolution** | `Path(__file__).resolve().parent.parent / "data"` | No hardcoded paths; works seamlessly across any developer's environment. |
+| **User CRUD (database)** | `User.objects` + `UserSerializer` | PostgreSQL-backed users with unique `username` and `email`. |
+| **Username login** | `POST /api/users/login/` + `LoginSerializer` | Validates input and returns user JSON or `404` for unknown username. |
+| **Full CRUD for Tasks (JSON)** | `GET`, `POST`, `PUT`, `DELETE` on `/api/tasks/` | Task lifecycle in `tasks.json` with list/detail/create/update/delete routes. |
+| **Relational filtering** | `GET /api/users/<user_id>/tasks/` | Filters tasks by `user_id` in JSON storage. |
+| **Schema migrations** | `tasks/migrations/` | Django migrations create the `User` table (`0001_initial`, follow-ups). |
+| **Local database** | `docker-compose.yml` | One-command Postgres for development. |
+| **Task timestamps** | `_utc_now()` | ISO-8601 UTC on task create/update. |
+| **Explicit HTTP statuses** | DRF `status.HTTP_*` | Semantic `200`, `201`, `400`, `404` responses. |
 
 ---
 
@@ -132,20 +133,19 @@ The **Task Project** is a fully functional, RESTful backend service for managing
 
 - **`users(request: Request) -> Response`**
   - **Method**: `GET`
-  - **Description**: Reads `users.json` via `read_json()` and returns all user records with status `200 OK`.
+  - **Description**: `User.objects.all()`, serialized with `UserSerializer(many=True)`, returns `200 OK`.
 - **`user_detail(request: Request, user_id: int) -> Response`**
   - **Method**: `GET`
-  - **Description**: Iterates through users to find a matching `id`. Returns the user object, or a `404 NOT FOUND` error if the user does not exist.
+  - **Description**: `User.objects.get(id=user_id)` or `404 NOT FOUND` if missing; response via `UserSerializer`.
+- **`login(request: Request) -> Response`**
+  - **Method**: `POST`
+  - **Description**: Validates body with `LoginSerializer`, looks up `User` by `username`, returns user JSON or `404 NOT FOUND`.
 - **`user_tasks(request: Request, user_id: int) -> Response`**
   - **Method**: `GET`
-  - **Description**: Verifies user existence via `_user_exists()`. If valid, filters `tasks.json` by `user_id` and returns the matching task list; otherwise returns `404 NOT FOUND`.
+  - **Description**: Verifies user via `_user_exists()` (JSON). Filters `tasks.json` by `user_id`; returns `404` if user not found in JSON.
 - **`create_user(request) -> Response`**
   - **Method**: `POST`
-  - **Description**:
-    1. Extracts `username`, `password`, and `email` from `request.data`.
-    2. Validates that all three fields are present; returns `400 BAD_REQUEST` if any are missing.
-    3. Scans existing users with sets (`username_set`, `email_set`) to check uniqueness; returns `400 BAD_REQUEST` if already taken.
-    4. Computes next ID (`max_id + 1`), builds the record, persists with `write_json()`, and returns `201 CREATED`.
+  - **Description**: Validates with `UserSerializer`, creates row via `User.objects.create(...)`, returns `201 CREATED` or serializer/DB errors as `400 BAD REQUEST`.
 - **`tasks(request: Request) -> Response`**
   - **Method**: `GET`
   - **Description**: Reads `tasks.json` and returns the list of all tasks with status `200 OK`.
@@ -173,9 +173,18 @@ The **Task Project** is a fully functional, RESTful backend service for managing
 - **`_utc_now() -> str`** *(Internal Helper)*
   - **Description**: Returns the current UTC time as an ISO-8601 formatted string (`YYYY-MM-DDTHH:MM:SSZ`).
 - **`_user_exists(user_id: int) -> bool`** *(Internal Helper)*
-  - **Description**: Reads `users.json` and checks if any user record has `id == user_id`.
+  - **Description**: Reads `users.json` (not PostgreSQL) and checks if any record has `id == user_id`. Used by task routes during the JSON → ORM transition.
 
-##### Persistence Layer (`tasks/services/json_util.py`)
+##### Serializers (`tasks/serializers.py`)
+
+- **`UserSerializer`**: `ModelSerializer` for `User` — fields `id`, `username`, `email`, `password` (read/write on create).
+- **`LoginSerializer`**: Accepts `username` for login validation.
+
+##### Models (`tasks/models.py`)
+
+- **`User`**: `username` (unique), `email` (unique), `password` — mapped to PostgreSQL via migrations.
+
+##### JSON persistence (`tasks/services/json_util.py`)
 
 - **`read_json(file_name: str) -> list`**
   - Uses `Path` resolution to target `tasks/data/<file_name>`.
@@ -193,7 +202,8 @@ The **Task Project** is a fully functional, RESTful backend service for managing
 | **Users** | `GET` | `/api/users/` | List all registered users | `200 OK` |
 | **Users** | `GET` | `/api/users/<user_id>/` | Retrieve user details by ID | `200 OK`, `404 Not Found` |
 | **Users** | `GET` | `/api/users/<user_id>/tasks/` | List all tasks assigned to a specific user | `200 OK`, `404 Not Found` |
-| **Users** | `POST` | `/api/users/create/` | Register a new user | `201 Created`, `400 Bad Request` |
+| **Users** | `POST` | `/api/users/create/` | Register a new user (PostgreSQL) | `201 Created`, `400 Bad Request` |
+| **Users** | `POST` | `/api/users/login/` | Login by username (returns user JSON) | `200 OK`, `400 Bad Request`, `404 Not Found` |
 | **Tasks** | `GET` | `/api/tasks/` | List all tasks | `200 OK` |
 | **Tasks** | `GET` | `/api/tasks/<task_id>/` | Retrieve task details by ID | `200 OK`, `404 Not Found` |
 | **Tasks** | `POST` | `/api/tasks/create/` | Create a new task | `201 Created`, `400 Bad Request` |
@@ -223,7 +233,18 @@ The **Task Project** is a fully functional, RESTful backend service for managing
 }
 ```
 
-##### 2. Create Task (`POST /api/tasks/create/`)
+##### 2. Login (`POST /api/users/login/`)
+**Request Body:**
+```json
+{
+  "username": "john_doe"
+}
+```
+**Response (`200 OK`):** Same shape as a single user object from `UserSerializer`.
+
+##### 3. Create Task (`POST /api/tasks/create/`)
+**Note:** `user_id` must exist in `tasks/data/users.json` for validation until task flows use the ORM.
+
 **Request Body:**
 ```json
 {
@@ -248,7 +269,7 @@ The **Task Project** is a fully functional, RESTful backend service for managing
 }
 ```
 
-##### 3. Update Task (`PUT /api/tasks/3/update/`)
+##### 4. Update Task (`PUT /api/tasks/3/update/`)
 **Request Body:**
 ```json
 {
@@ -282,30 +303,32 @@ The **Task Project** is a fully functional, RESTful backend service for managing
    cd task-project
    ```
 
-2. Activate the virtual environment:
-   - **macOS / Linux:**
-     ```bash
-     source .venv/bin/activate
-     ```
-   - **Windows:**
-     ```bat
-     .venv\Scripts\activate
-     ```
+2. Start PostgreSQL (Docker):
+   ```bash
+   docker compose up -d
+   ```
+   Database: `taskdb` on `localhost:5432` (user/password `postgres`), as configured in `config/settings.py`.
 
-3. Run database migrations (initializes core Django auth/admin tables):
+3. Activate the virtual environment and install dependencies (Django, DRF, PostgreSQL driver, for example `psycopg2-binary`):
+   - **macOS / Linux:** `source .venv/bin/activate`
+   - **Windows:** `.venv\Scripts\activate`
+
+4. Apply migrations (Django system tables + `tasks.User`):
    ```bash
    python manage.py migrate
    ```
 
-4. Start the development server:
+5. Start the development server:
    ```bash
    python manage.py runserver
    ```
-   The API will be available at `http://127.0.0.1:8000/api/`.
+   Base API URL: `http://127.0.0.1:8000/api/`
 
-5. Test an endpoint with cURL:
+6. Example requests:
    ```bash
+   curl -X GET http://127.0.0.1:8000/api/users/
    curl -X GET http://127.0.0.1:8000/api/tasks/
+   curl -X POST http://127.0.0.1:8000/api/users/login/ -H "Content-Type: application/json" -d "{\"username\":\"Amar S\"}"
    ```
 
 ---
@@ -350,14 +373,17 @@ In addition to Django, this repository provides deep coverage of core Python con
 - **[RequestTypes.md](RequestTypes.md)**: Deep dive into HTTP methods (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`), comparison of full updates (`PUT`) vs partial updates (`PATCH`), and anatomy of requests (Body, Query params, Path params, Headers).
 - **[StatusCode.md](StatusCode.md)**: Comprehensive guide detailing standard HTTP response codes (`2xx Success`, `3xx Redirection`, `4xx Client Errors`, `5xx Server Errors`) with real-world scenarios.
 - **[Django-Setup.md](first-django-project/Django-Setup.md)**: Step-by-step setup guide for creating virtual environments, installing dependencies, configuring Django settings, and running development servers across different operating systems.
+- **[model.md](task-project/model.md)**: Short notes on **models** vs **entities**, and how Django models map to database schema.
 
 ---
 
 ## Prerequisites & Setup
 
 ### Prerequisites
-- **Python 3.8+** (Python 3.10+ recommended)
+- **Python 3.8+** (Python 3.10+ recommended; Task Project targets **Django 6.1**)
 - **pip** (Python package installer)
+- **Docker Desktop** (or local PostgreSQL) for `task-project` database
+- Python packages for Task Project: `django`, `djangorestframework`, and a PostgreSQL adapter (for example `psycopg2-binary`)
 
 ### Quick Start
 
@@ -377,7 +403,9 @@ In addition to Django, this repository provides deep coverage of core Python con
 3. Run the Django Task Project:
    ```bash
    cd task-project
+   docker compose up -d
    source .venv/bin/activate   # On Windows: .venv\Scripts\activate
+   python manage.py migrate
    python manage.py runserver
    ```
 

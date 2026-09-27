@@ -2,18 +2,16 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Django (Force 3.14)",
+            "name": "Python Debugger: Django",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/manage.py",
-            // 💡 Points directly to your working .venv binary on Mac
-            "python": "${workspaceFolder}/.venv/bin/python", 
             "args": [
                 "runserver",
                 "--noreload"
             ],
             "django": true,
-            "subProcess": false, 
+            "subProcess": false,
             "autoStartBrowser": false
         }
     ]
