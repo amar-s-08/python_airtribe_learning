@@ -9,13 +9,15 @@ A comprehensive learning repository covering **Python Fundamentals**, **Data Str
 - [Repository Overview](#repository-overview)
 - [Project Structure](#project-structure)
 - [Django Applications](#django-applications)
-  - [1. Task Project (`task-project/`) — Full REST API](#1-task-project-task-project--full-rest-api)
+  - [1. Task Project (`task-project/`) — REST API + React UI](#1-task-project-task-project--rest-api--react-ui)
     - [Architecture & Design Highlights](#architecture--design-highlights)
     - [Core Capabilities & Specialties](#core-capabilities--specialties)
     - [Functions & Utilities Reference](#functions--utilities-reference)
+    - [Learning Progression (Commented Code)](#learning-progression-commented-code)
     - [API Endpoints Reference](#api-endpoints-reference)
     - [Sample Payloads & Usage](#sample-payloads--usage)
     - [Running the Task Project](#running-the-task-project)
+    - [React Frontend (`task-project/frontend/`)](#react-frontend-task-projectfrontend)
   - [2. First Django Project (`first-django-project/`)](#2-first-django-project-first-django-project)
     - [Features & Endpoints](#features--endpoints)
 - [Python Fundamentals & OOP Modules](#python-fundamentals--oop-modules)
@@ -32,7 +34,7 @@ This repository documents the transition from core Python programming concepts t
 1. **Python Core & Data Structures**: Scripts covering control flow, primitive and non-primitive structures (lists, stacks, queues, linked lists, sets, dicts, tuples), and robust error handling.
 2. **Object-Oriented Programming (OOP)**: Real-world implementations demonstrating the four pillars of OOP (Inheritance, Polymorphism, Abstraction, Encapsulation).
 3. **HTTP & REST Fundamentals**: Detailed notes and references on HTTP methods, status codes, and request payloads.
-4. **Django REST Services**: Hands-on Django projects with **PostgreSQL**, **Django ORM models**, **DRF serializers**, JSON-backed task storage (transitional), Docker Compose for local databases, and RESTful routing.
+4. **Django REST Services**: Full-stack **Task Project** with **PostgreSQL**, **Django ORM** (`User`, `Task` with foreign key), **DRF `ModelViewSet`s** and **`DefaultRouter`**, class-based **login**, and a **React + Vite** UI that consumes the API.
 
 ---
 
@@ -65,50 +67,57 @@ python_airtribe_learning/
 │       ├── urls.py                # App routing (/hello, /addTwoNumbers)
 │       └── views.py               # Query parameter handling, math operations, status codes
 │
-└── task-project/                  # Task & User Management REST Service
+└── task-project/                  # Task & User Management (API + UI)
     ├── manage.py                  # Django CLI runner
-    ├── docker-compose.yml         # Local PostgreSQL (taskdb) for development
+    ├── docker-compose.yml         # Local PostgreSQL (taskdb)
     ├── postgres_backup.sql        # SQL dump / backup reference
     ├── model.md                   # Notes on models vs entities (Django)
     ├── config/                    # Project settings & root routing
-    │   ├── settings.py            # PostgreSQL config, rest_framework, tasks app
-    │   └── urls.py                # Main URLconf delegating to tasks.urls
-    └── tasks/                     # Core business application
-        ├── models.py              # User Django model (PostgreSQL)
-        ├── serializers.py         # UserSerializer, LoginSerializer
-        ├── migrations/            # Django schema migrations (User table)
-        ├── urls.py                # RESTful endpoint routes (/api/users/, /api/tasks/)
-        ├── views.py               # User ORM + task JSON controllers
-        ├── services/              # Persistence helpers
-        │   └── json_util.py       # JSON file I/O for tasks (and legacy user checks)
-        └── data/                  # JSON document storage
-            ├── users.json         # Legacy/sample users (still used for task user_id checks)
-            └── tasks.json         # Task records
+    │   ├── settings.py            # PostgreSQL, rest_framework, tasks app
+    │   └── urls.py                # `/admin/`, `/api/` → tasks.urls
+    ├── frontend/                  # React + Vite SPA (Taskboard UI)
+    │   ├── package.json           # React 19, react-router-dom, Vite
+    │   ├── vite.config.js         # Dev proxy: `/api` → Django :8000
+    │   └── src/
+    │       ├── api.js             # REST client (users, tasks)
+    │       ├── auth.jsx           # Client-side session (localStorage)
+    │       └── pages/             # Login, tasks, users management
+    └── tasks/                     # Django app
+        ├── models.py              # User + Task (FK user → tasks)
+        ├── serializers.py         # UserSerializer, LoginSerializer, TaskSerializer
+        ├── migrations/            # User + Task schema (e.g. 0004_task)
+        ├── urls.py                # DefaultRouter + login route
+        ├── views.py               # UserViewSet, TaskViewSet, LoginView
+        ├── services/json_util.py  # Legacy JSON helpers (earlier exercises; commented in views)
+        └── data/                  # Sample JSON from file-based prototype
 ```
 
 ---
 
 ## Django Applications
 
-### 1. Task Project (`task-project/`) — Full REST API
+### 1. Task Project (`task-project/`) — REST API + React UI
 
-The **Task Project** is a RESTful backend for **Users** and **Tasks**, built with **Django 6.1** and **Django REST Framework (DRF)**. User APIs persist to **PostgreSQL** via the Django ORM; task APIs still use **JSON files** while the schema is being migrated—see [model.md](task-project/model.md) for how models/entities fit together.
+The **Task Project** is a full-stack app for **Users** and **Tasks**, built with **Django 6.1**, **DRF**, and **PostgreSQL**. Both entities are Django models with a real **foreign key** (`Task.user` → `User`). The API uses **routers and viewsets**; a **React** frontend provides login, task boards, and user management. Earlier function-based and JSON-file implementations remain **commented** in `tasks/views.py` for comparison—see [model.md](task-project/model.md).
 
 #### Architecture & Design Highlights
 
-- **Hybrid persistence (learning migration)**:
-  - **Users**: `User` model in PostgreSQL (`tasks/models.py`), exposed through `UserSerializer` and `LoginSerializer`.
-  - **Tasks**: Stored in `tasks/data/tasks.json` via `read_json` / `write_json` in `tasks/services/json_util.py`.
-  - Task endpoints validate `user_id` with `_user_exists()`, which currently reads **`users.json`**, not the database. After creating users through `POST /api/users/create/`, sync IDs in `users.json` or migrate task validation to the ORM so task creation matches DB users.
-- **PostgreSQL via Docker Compose**:
-  - `docker-compose.yml` runs Postgres (`taskdb`, user/password `postgres`) on port `5432`, matching `config/settings.py`.
-- **DRF serializers**:
-  - `UserSerializer` (`ModelSerializer`) validates and shapes create/list/detail responses.
-  - `LoginSerializer` validates username-only login payloads.
-- **REST controllers**:
-  - Function-based views with `@api_view` in `tasks/views.py`; commented blocks preserve the earlier JSON-only implementation for comparison.
-- **Tasks JSON layer**:
-  - Auto-increment IDs, UTC timestamps (`_utc_now()`), and CRUD still mirror the original file-based design.
+- **PostgreSQL + ORM**:
+  - `User`: unique `username`, `email`, `password`.
+  - `Task`: `ForeignKey` to `User` (`related_name="tasks"`), `title`, `description`, `completed`, `created_at`, `updated_at`, `due_date`.
+- **DRF routing**:
+  - `DefaultRouter` registers `UserViewSet` and `TaskViewSet` at `/api/users/` and `/api/tasks/`.
+  - Standard `ModelViewSet` CRUD: list, retrieve, create, update, partial update (`PATCH`), destroy (`DELETE` → `204 No Content`).
+- **Custom actions & auth-style login**:
+  - `UserViewSet.by_username` → `GET /api/users/username/<username>/` (used by the React login screen).
+  - `UserViewSet.tasks` → `GET /api/users/<id>/tasks/` (tasks for one user via ORM).
+  - `LoginView` (`APIView`) → `POST /api/users/login/` with `LoginSerializer` (username lookup).
+- **Serializers**:
+  - `UserSerializer`, `TaskSerializer` (`ModelSerializer`); task `id`, `created_at`, `updated_at` are read-only.
+- **React frontend**:
+  - Vite dev server on port **5173** proxies `/api` to Django **8000**.
+  - Client auth stores the signed-in user in **localStorage** (demo flow, not token/JWT).
+- **Docker Compose**: Postgres `taskdb` on `localhost:5432`, aligned with `config/settings.py`.
 
 ---
 
@@ -116,105 +125,160 @@ The **Task Project** is a RESTful backend for **Users** and **Tasks**, built wit
 
 | Capability | Implementation Detail | Specialty / Benefit |
 |------------|-----------------------|---------------------|
-| **User CRUD (database)** | `User.objects` + `UserSerializer` | PostgreSQL-backed users with unique `username` and `email`. |
-| **Username login** | `POST /api/users/login/` + `LoginSerializer` | Validates input and returns user JSON or `404` for unknown username. |
-| **Full CRUD for Tasks (JSON)** | `GET`, `POST`, `PUT`, `DELETE` on `/api/tasks/` | Task lifecycle in `tasks.json` with list/detail/create/update/delete routes. |
-| **Relational filtering** | `GET /api/users/<user_id>/tasks/` | Filters tasks by `user_id` in JSON storage. |
-| **Schema migrations** | `tasks/migrations/` | Django migrations create the `User` table (`0001_initial`, follow-ups). |
-| **Local database** | `docker-compose.yml` | One-command Postgres for development. |
-| **Task timestamps** | `_utc_now()` | ISO-8601 UTC on task create/update. |
-| **Explicit HTTP statuses** | DRF `status.HTTP_*` | Semantic `200`, `201`, `400`, `404` responses. |
+| **User CRUD** | `UserViewSet` + `UserSerializer` | Full REST CRUD on `/api/users/` with DB uniqueness constraints. |
+| **Task CRUD** | `TaskViewSet` + `TaskSerializer` | Tasks persisted in PostgreSQL with FK to user. |
+| **Nested tasks by user** | `@action tasks` on `UserViewSet` | `GET /api/users/<id>/tasks/` uses `user.tasks.all()`. |
+| **Lookup by username** | `@action by_username` | `GET /api/users/username/<username>/` for sign-in from the UI. |
+| **API login endpoint** | `LoginView` + `LoginSerializer` | `POST /api/users/login/` returns user JSON or `404`. |
+| **Router URLs** | `DefaultRouter` | No manual `/create/` or `/update/` paths—RESTful resource URLs. |
+| **Schema migrations** | `0001_initial` … `0004_task` | Evolves `User` and adds `Task` table. |
+| **SPA** | `frontend/` React app | Taskboard: my tasks, all tasks, people, login/register. |
 
 ---
 
 #### Functions & Utilities Reference
 
-##### Application Controllers (`tasks/views.py`)
+##### ViewSets & views (`tasks/views.py`)
 
-- **`users(request: Request) -> Response`**
-  - **Method**: `GET`
-  - **Description**: `User.objects.all()`, serialized with `UserSerializer(many=True)`, returns `200 OK`.
-- **`user_detail(request: Request, user_id: int) -> Response`**
-  - **Method**: `GET`
-  - **Description**: `User.objects.get(id=user_id)` or `404 NOT FOUND` if missing; response via `UserSerializer`.
-- **`login(request: Request) -> Response`**
-  - **Method**: `POST`
-  - **Description**: Validates body with `LoginSerializer`, looks up `User` by `username`, returns user JSON or `404 NOT FOUND`.
-- **`user_tasks(request: Request, user_id: int) -> Response`**
-  - **Method**: `GET`
-  - **Description**: Verifies user via `_user_exists()` (JSON). Filters `tasks.json` by `user_id`; returns `404` if user not found in JSON.
-- **`create_user(request) -> Response`**
-  - **Method**: `POST`
-  - **Description**: Validates with `UserSerializer`, creates row via `User.objects.create(...)`, returns `201 CREATED` or serializer/DB errors as `400 BAD REQUEST`.
-- **`tasks(request: Request) -> Response`**
-  - **Method**: `GET`
-  - **Description**: Reads `tasks.json` and returns the list of all tasks with status `200 OK`.
-- **`task_detail(request: Request, task_id: int) -> Response`**
-  - **Method**: `GET`
-  - **Description**: Searches for task matching `task_id`. Returns the task object or `404 NOT FOUND`.
-- **`create_task(request) -> Response`**
-  - **Method**: `POST`
-  - **Description**:
-    1. Extracts `user_id`, `title`, `description`, `iscompleted`, and `due_date`.
-    2. Validates that `user_id` and `title` are provided (`400 BAD_REQUEST` on failure).
-    3. Validates that `user_id` exists in `users.json` (`400 BAD_REQUEST` on failure).
-    4. Generates an auto-incremented `id` and applies UTC timestamps (`created_at`, `updated_at`).
-    5. Appends the task, writes back to `tasks.json`, and returns `201 CREATED`.
-- **`update_task(request, task_id: int) -> Response`**
-  - **Method**: `PUT`
-  - **Description**:
-    1. Locates the task by `task_id` (`404 NOT FOUND` if absent).
-    2. Validates mandatory fields (`user_id`, `title`) and checks that `user_id` exists.
-    3. Updates task attributes and refreshes `updated_at` with `_utc_now()`.
-    4. Persists the updated list to `tasks.json` and returns the modified task.
-- **`delete_task(request, task_id: int) -> Response`**
-  - **Method**: `DELETE`
-  - **Description**: Finds the task by `task_id` (`404 NOT FOUND` if absent), removes it from the list, writes back to `tasks.json`, and returns `200 OK` with a confirmation message.
-- **`_utc_now() -> str`** *(Internal Helper)*
-  - **Description**: Returns the current UTC time as an ISO-8601 formatted string (`YYYY-MM-DDTHH:MM:SSZ`).
-- **`_user_exists(user_id: int) -> bool`** *(Internal Helper)*
-  - **Description**: Reads `users.json` (not PostgreSQL) and checks if any record has `id == user_id`. Used by task routes during the JSON → ORM transition.
+- **`UserViewSet(ModelViewSet)`**
+  - `queryset = User.objects.all()`, `serializer_class = UserSerializer`.
+  - Inherits: `list`, `retrieve`, `create`, `update`, `partial_update`, `destroy`.
+  - **`by_username`**: `GET` … `/users/username/<username>/` — fetch one user by username.
+  - **`tasks`**: `GET` … `/users/<pk>/tasks/` — list tasks for that user (`TaskSerializer`, many=True).
+- **`TaskViewSet(ModelViewSet)`**
+  - `queryset = Task.objects.all()`, `serializer_class = TaskSerializer`.
+  - Full CRUD on `/api/tasks/` and `/api/tasks/<pk>/`.
+- **`LoginView(APIView)`**
+  - `POST /api/users/login/` — validates `LoginSerializer`, returns serialized user or errors.
 
 ##### Serializers (`tasks/serializers.py`)
 
-- **`UserSerializer`**: `ModelSerializer` for `User` — fields `id`, `username`, `email`, `password` (read/write on create).
-- **`LoginSerializer`**: Accepts `username` for login validation.
+- **`UserSerializer`**: `id`, `username`, `email`, `password`.
+- **`LoginSerializer`**: `username` (POST body for login).
+- **`TaskSerializer`**: `id`, `user`, `title`, `description`, `completed`, `created_at`, `updated_at`, `due_date` (timestamps read-only).
 
 ##### Models (`tasks/models.py`)
 
-- **`User`**: `username` (unique), `email` (unique), `password` — mapped to PostgreSQL via migrations.
+- **`User`**: `username`, `email`, `password` (all unique where applicable).
+- **`Task`**: `user` (FK, `CASCADE`, `related_name="tasks"`), `title`, `description`, `completed`, auto timestamps, optional `due_date`.
 
-##### JSON persistence (`tasks/services/json_util.py`)
+##### Routing (`tasks/urls.py`)
 
-- **`read_json(file_name: str) -> list`**
-  - Uses `Path` resolution to target `tasks/data/<file_name>`.
-  - Uses a `with open(..., "r")` context manager to read and deserialize JSON data safely without file descriptor leaks.
-- **`write_json(file_name: str, data: list)`**
-  - Opens target path with `with open(..., "w")`.
-  - Serializes `data` with `json.dump(data, file, indent=2)` for structured, legible storage.
+- `DefaultRouter` → `users`, `tasks` viewsets.
+- `path("users/login/", LoginView.as_view())` before/ alongside router include.
+
+#### Learning Progression (Commented Code)
+
+The Task Project keeps earlier implementations **in comments** so you can compare approaches side by side. Active code is at the bottom of `tasks/views.py` (`UserViewSet`, `TaskViewSet`, `LoginView`); everything below walks through what those comments teach.
+
+##### Stage 1 — JSON file storage (`tasks/services/json_util.py`, `tasks/data/`)
+
+- **`read_json` / `write_json`**: Read and write lists of dicts under `tasks/data/` using `pathlib.Path` (portable paths via `Path(__file__).resolve().parent.parent / "data"`).
+- **Context managers**: Files opened with `with open(...)` so handles close automatically (comments in `json_util.py` explain why bare `open` + `return json.load` is unsafe).
+- **Sample data**: `users.json` and `tasks.json` powered the first version of the API before PostgreSQL.
+
+##### Stage 2 — Function-based views (`@api_view`) and explicit URL paths
+
+Commented in `tasks/views.py` and `tasks/urls.py`:
+
+| HTTP | Old path (commented) | Handler idea |
+|------|----------------------|--------------|
+| `GET` | `/api/users/` | `read_json(USERS)` or later `User.objects.all()` + serializer |
+| `GET` | `/api/users/<user_id>/` | Loop JSON or `User.objects.get` |
+| `POST` | `/api/users/create/` | Create user (JSON append or `User.objects.create`) |
+| `POST` | `/api/users/login/` | `@api_view` + `LoginSerializer` (replaced by `LoginView`) |
+| `GET` | `/api/users/<user_id>/tasks/` | Filter `tasks.json` by `user_id` (see legacy `user_tasks` below) |
+| `GET` | `/api/tasks/` | Return full `tasks.json` |
+| `GET` | `/api/tasks/<task_id>/` | Scan list for matching `id` |
+| `POST` | `/api/tasks/create/` | Append task with `max_id + 1` |
+| `PUT` | `/api/tasks/<task_id>/update/` | Mutate dict in list, `write_json` |
+| `DELETE` | `/api/tasks/<task_id>/delete/` | `list.remove`, confirmation `200` (not `204`) |
+
+**JSON user create** (commented): required `username`, `password`, `email`; duplicate checks with `set` on usernames/emails; manual `max_id + 1`; `write_json(USERS, users)`.
+
+**JSON task create** (commented): fields `user_id`, `title`, `description`, `iscompleted`, `due_date`; `_user_exists(user_id)` against **`users.json`**; timestamps via **`_utc_now()`** (`%Y-%m-%dT%H:%M:%SZ` UTC).
+
+**Helpers** (commented): `_utc_now()`, `_user_exists()` — only needed for the file-based task flow.
+
+> **Note:** `user_tasks` is still defined as an `@api_view` using JSON filtering, but it is **not** wired in `urls.py` anymore. User tasks are served by **`UserViewSet.tasks`** on the ORM.
+
+##### Stage 3 — Serializers: manual vs `ModelSerializer` (`tasks/serializers.py`)
+
+Commented **manual** serializer:
+
+```python
+# class UserSerializer(serializers.Serializer):
+#     id = serializers.IntegerField(read_only=True)
+#     username = serializers.CharField(max_length=100)
+#     ...
+```
+
+Active **`ModelSerializer`** maps directly to the `User` / `Task` models and reduces boilerplate. Commented **`create_user`** shows the manual path: `serializer.is_valid()` → `User.objects.create(...)` → serialize response (same idea `ModelViewSet.create` handles for you).
+
+##### Stage 4 — Login: function view vs class view
+
+- **Commented:** `@api_view(["POST"]) def login(...)` with `LoginSerializer` and `User.objects.get(username=...)`.
+- **Active:** `LoginView(APIView).post(...)` — same behavior.
+- **Comment in code:** function-based and class-based views are equivalent for a single action; class-based views are preferred, but one class cannot define two `post` methods.
+
+##### Stage 5 — `ViewSet` vs `ModelViewSet` (comments above `UserViewSet`)
+
+**`ModelViewSet`** (active) — six operations wired to HTTP:
+
+| ViewSet method | HTTP | Route |
+|----------------|------|--------|
+| `list` | `GET` | `/users/` |
+| `retrieve` | `GET` | `/users/<id>/` |
+| `create` | `POST` | `/users/` |
+| `update` | `PUT` | `/users/<id>/` |
+| `partial_update` | `PATCH` | `/users/<id>/` |
+| `destroy` | `DELETE` | `/users/<id>/` |
+
+**`ViewSet`** (commented `class UserViewSet(ViewSet)`) — you implement `list`, `retrieve`, `create`, `update`, `destroy` yourself (no built-in `partial_update`). Comments note **five** database-facing actions vs six on `ModelViewSet`.
+
+Custom endpoints use **`@action`**: `by_username` (`detail=False`) and `tasks` (`detail=True`) — same pattern you would have added on the manual `ViewSet`.
+
+##### Stage 6 — Current stack (what runs in production/dev)
+
+| Layer | From → To |
+|-------|-----------|
+| Storage | `users.json` / `tasks.json` → **PostgreSQL** (`User`, `Task` FK) |
+| Users API | `@api_view` + `/create/` → **`UserViewSet` + router** |
+| Tasks API | JSON CRUD + `iscompleted` / `user_id` → **`TaskViewSet` + `completed` / `user` FK** |
+| URLs | Manual `path(...)` list → **`DefaultRouter`** + `include(router.urls)` |
+| Login | `@api_view` `login` → **`LoginView`** (router path unchanged: `/users/login/`) |
+
+To study an old version, uncomment the relevant blocks in `views.py` / `urls.py` and comment out the `ViewSet` + router wiring (only one routing style should be active at a time).
 
 ---
 
 #### API Endpoints Reference
 
-| Category | HTTP Method | Endpoint | Description | Status Codes |
-|----------|-------------|----------|-------------|--------------|
-| **Users** | `GET` | `/api/users/` | List all registered users | `200 OK` |
-| **Users** | `GET` | `/api/users/<user_id>/` | Retrieve user details by ID | `200 OK`, `404 Not Found` |
-| **Users** | `GET` | `/api/users/<user_id>/tasks/` | List all tasks assigned to a specific user | `200 OK`, `404 Not Found` |
-| **Users** | `POST` | `/api/users/create/` | Register a new user (PostgreSQL) | `201 Created`, `400 Bad Request` |
-| **Users** | `POST` | `/api/users/login/` | Login by username (returns user JSON) | `200 OK`, `400 Bad Request`, `404 Not Found` |
-| **Tasks** | `GET` | `/api/tasks/` | List all tasks | `200 OK` |
-| **Tasks** | `GET` | `/api/tasks/<task_id>/` | Retrieve task details by ID | `200 OK`, `404 Not Found` |
-| **Tasks** | `POST` | `/api/tasks/create/` | Create a new task | `201 Created`, `400 Bad Request` |
-| **Tasks** | `PUT` | `/api/tasks/<task_id>/update/` | Update an existing task | `200 OK`, `400 Bad Request`, `404 Not Found` |
-| **Tasks** | `DELETE` | `/api/tasks/<task_id>/delete/` | Delete a task by ID | `200 OK`, `404 Not Found` |
+Base path: `http://127.0.0.1:8000/api/` (or via Vite proxy at `http://localhost:5173/api/`).
+
+| Resource | HTTP Method | Endpoint | Description |
+|----------|-------------|----------|-------------|
+| **Users** | `GET` | `/users/` | List users |
+| **Users** | `POST` | `/users/` | Create user |
+| **Users** | `GET` | `/users/<id>/` | Retrieve user |
+| **Users** | `PUT` | `/users/<id>/` | Replace user |
+| **Users** | `PATCH` | `/users/<id>/` | Partial update user |
+| **Users** | `DELETE` | `/users/<id>/` | Delete user (`204`) |
+| **Users** | `GET` | `/users/username/<username>/` | User by username (custom action) |
+| **Users** | `GET` | `/users/<id>/tasks/` | Tasks for user (custom action) |
+| **Users** | `POST` | `/users/login/` | Login with `{ "username": "..." }` |
+| **Tasks** | `GET` | `/tasks/` | List tasks |
+| **Tasks** | `POST` | `/tasks/` | Create task |
+| **Tasks** | `GET` | `/tasks/<id>/` | Retrieve task |
+| **Tasks** | `PUT` | `/tasks/<id>/` | Replace task |
+| **Tasks** | `PATCH` | `/tasks/<id>/` | Partial update (e.g. toggle `completed`) |
+| **Tasks** | `DELETE` | `/tasks/<id>/` | Delete task (`204`) |
 
 ---
 
 #### Sample Payloads & Usage
 
-##### 1. Create User (`POST /api/users/create/`)
+##### 1. Create User (`POST /api/users/`)
 **Request Body:**
 ```json
 {
@@ -223,74 +287,31 @@ The **Task Project** is a RESTful backend for **Users** and **Tasks**, built wit
   "password": "securepassword123"
 }
 ```
-**Response (`201 Created`):**
-```json
-{
-  "id": 5,
-  "username": "john_doe",
-  "email": "john@example.com",
-  "password": "securepassword123"
-}
-```
 
-##### 2. Login (`POST /api/users/login/`)
+##### 2. Sign in (API — `POST /api/users/login/`)
+**Request Body:** `{ "username": "john_doe" }`  
+**Response (`200 OK`):** User object from `UserSerializer`.
+
+The React app signs in with **`GET /api/users/username/<username>/`** instead (see `frontend/src/api.js`).
+
+##### 3. Create Task (`POST /api/tasks/`)
 **Request Body:**
 ```json
 {
-  "username": "john_doe"
+  "user": 1,
+  "title": "Build Django README",
+  "description": "Document viewsets and the React UI.",
+  "completed": false,
+  "due_date": "2026-09-10T18:00:00Z"
 }
 ```
-**Response (`200 OK`):** Same shape as a single user object from `UserSerializer`.
+`user` is the primary key of an existing `User`. `created_at` / `updated_at` are set by the model.
 
-##### 3. Create Task (`POST /api/tasks/create/`)
-**Note:** `user_id` must exist in `tasks/data/users.json` for validation until task flows use the ORM.
-
+##### 4. Partial update (`PATCH /api/tasks/3/`)
 **Request Body:**
 ```json
 {
-  "user_id": 1,
-  "title": "Build Django README",
-  "description": "Document all endpoints, functions, and architecture.",
-  "iscompleted": false,
-  "due_date": "2026-09-10T18:00:00Z"
-}
-```
-**Response (`201 Created`):**
-```json
-{
-  "id": 3,
-  "user_id": 1,
-  "title": "Build Django README",
-  "description": "Document all endpoints, functions, and architecture.",
-  "iscompleted": false,
-  "created_at": "2026-09-06T17:15:30Z",
-  "updated_at": "2026-09-06T17:15:30Z",
-  "due_date": "2026-09-10T18:00:00Z"
-}
-```
-
-##### 4. Update Task (`PUT /api/tasks/3/update/`)
-**Request Body:**
-```json
-{
-  "user_id": 1,
-  "title": "Build Django README",
-  "description": "Document all endpoints, functions, and architecture.",
-  "iscompleted": true,
-  "due_date": "2026-09-10T18:00:00Z"
-}
-```
-**Response (`200 OK`):**
-```json
-{
-  "id": 3,
-  "user_id": 1,
-  "title": "Build Django README",
-  "description": "Document all endpoints, functions, and architecture.",
-  "iscompleted": true,
-  "created_at": "2026-09-06T17:15:30Z",
-  "updated_at": "2026-09-06T17:20:10Z",
-  "due_date": "2026-09-10T18:00:00Z"
+  "completed": true
 }
 ```
 
@@ -326,10 +347,29 @@ The **Task Project** is a RESTful backend for **Users** and **Tasks**, built wit
 
 6. Example requests:
    ```bash
-   curl -X GET http://127.0.0.1:8000/api/users/
-   curl -X GET http://127.0.0.1:8000/api/tasks/
-   curl -X POST http://127.0.0.1:8000/api/users/login/ -H "Content-Type: application/json" -d "{\"username\":\"Amar S\"}"
+   curl http://127.0.0.1:8000/api/users/
+   curl http://127.0.0.1:8000/api/tasks/
+   curl -X POST http://127.0.0.1:8000/api/users/login/ -H "Content-Type: application/json" -d "{\"username\":\"john_doe\"}"
    ```
+
+#### React Frontend (`task-project/frontend/`)
+
+**Taskboard** SPA: sign in or register, view **My tasks** / **All tasks**, manage **People** (users).
+
+1. With Django running on port 8000, from `task-project/frontend`:
+   ```bash
+   npm install
+   npm run dev
+   ```
+2. Open `http://localhost:5173`. API calls use `/api/...` and are proxied to Django (`vite.config.js`).
+
+| File | Role |
+|------|------|
+| `src/api.js` | `usersApi`, `tasksApi`, date helpers |
+| `src/auth.jsx` | `AuthProvider`, localStorage session |
+| `src/pages/LoginPage.jsx` | Sign in (by username) or create account |
+| `src/pages/TasksPage.jsx` | Task list/create/edit for current or all users |
+| `src/pages/UsersPage.jsx` | User CRUD |
 
 ---
 
@@ -383,6 +423,7 @@ In addition to Django, this repository provides deep coverage of core Python con
 - **Python 3.8+** (Python 3.10+ recommended; Task Project targets **Django 6.1**)
 - **pip** (Python package installer)
 - **Docker Desktop** (or local PostgreSQL) for `task-project` database
+- **Node.js 18+** and **npm** for the Task Project React frontend
 - Python packages for Task Project: `django`, `djangorestframework`, and a PostgreSQL adapter (for example `psycopg2-binary`)
 
 ### Quick Start
@@ -400,13 +441,14 @@ In addition to Django, this repository provides deep coverage of core Python con
    python module01/oop.py
    ```
 
-3. Run the Django Task Project:
+3. Run the Django Task Project (API + optional UI):
    ```bash
    cd task-project
    docker compose up -d
    source .venv/bin/activate   # On Windows: .venv\Scripts\activate
    python manage.py migrate
    python manage.py runserver
+   cd frontend && npm install && npm run dev
    ```
 
 ---
